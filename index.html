@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Consum Pro</title>
+    <!-- Import Chart.js pentru grafice -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { text-align: center; background: linear-gradient(135deg, #60a5fa, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #94a3b8; margin-bottom: 30px; }
+        
+        .section { background: #1e293b; border-radius: 16px; padding: 24px; margin-bottom: 24px; border: 1px solid #334155; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+        label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #475569; border-radius: 8px; background: #0f172a; color: white; }
+        
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-edit { background: #f59e0b; color: white; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-secondary { background: #64748b; color: white; }
+        
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 16px; border: 1px solid #334155; }
+        .card .value { font-size: 1.8rem; font-weight: bold; margin: 10px 0; }
+        .card.electric .value { color: #fbbf24; }
+        .card.gaz .value { color: #34d399; }
+        .card.total .value { color: #60a5fa; }
+
+        .chart-container { position: relative; height: 350px; width: 100%; margin-bottom: 20px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
+        th { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; }
+
+        .btn-action-group { display: flex; gap: 6px; }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; color: black; }
+            .section { border: none; background: white; }
+            .card { border: 1px solid #ccc; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="no-print">⚡ Monitor Consum Pro</h1>
+    <p class="subtitle no-print">Urmărește, analizează și exportă datele tale de consum</p>
+
+    <div class="summary no-print">
+        <div class="card electric">
+            <div class="label">⚡ Electric (Ultima Perioadă)</div>
+            <div class="value" id="sumE">0 kWh</div>
+            <div id="sumEC">≈ 0 RON</div>
+        </div>
+        <div class="card gaz">
+            <div class="label">🔥 Gaz (Ultima Perioadă)</div>
+            <div class="value" id="sumG">0 m³</div>
+            <div id="sumGC">≈ 0 RON</div>
+        </div>
+        <div class="card total">
+            <div class="label">💰 Cost Estimat Total</div>
+            <div class="value" id="sumT">0 RON</div>
+            <div>Ultima perioadă de citire</div>
+        </div>
+    </div>
+
+    <div class="section no-print">
+        <h2>📊 Analiză Consum (Grafic)</h2>
+        <div class="chart-container">
+            <canvas id="consumChart"></canvas>
+        </div>
+    </div>
+
+    <div class="section no-print">
+        <h2>⚙️ Setări & Date</h2>
+        <div class="grid">
+            <div><label>Preț Elec (RON/kWh)</label><input type="number" id="sPriceE" step="0.01" placeholder="0.65"></div>
+            <div><label>Preț Unitar Gaz (RON/kWh)</label><input type="number" id="sPriceG" step="0.01" placeholder="0.25"></div>
+            <div><label>Coef. Transformare Gaz</label><input type="number" id="sCoefG" step="0.00001" placeholder="10.87639"></div>
+            <div><label>Cost Fixe Gaz (RON)</label><input type="number" id="sFixG" step="0.01" placeholder="37.21"></div>
+            <div><label>Import CSV</label><input type="file" id="csvFile" accept=".csv" style="font-size: 0.7rem;"></div>
+            <div><button class="btn btn-primary" onclick="saveSettings()">💾 Salvează Setări</button></div>
+        </div>
+    </div>
+
+    <div class="section no-print">
+        <h2 id="formTitle">➕ Adaugă Citire</h2>
+        <div class="grid">
+            <div><label>Data</label><input type="date" id="iDate"></div>
+            <div><label>Tip</label><select id="iType"><option value="electric">⚡ Electric</option><option value="gaz">🔥 Gaz</option></select></div>
+            <div><label>Index</label><input type="number" id="iIndex" step="0.01" placeholder="ex: 1234.56"></div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-success" id="submitBtn" onclick="submitReading()">Adaugă</button>
+                <button class="btn btn-secondary" id="cancelBtn" onclick="cancelEdit()" style="display: none;">Anulează</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="no-print" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>📋 Istoric Consum</h2>
+            <div>
+                <button class="btn btn-primary" onclick="window.print()">🖨️ Print PDF</button>
+                <button class="btn btn-danger" onclick="clearAll()">🗑️ Șterge Tot</button>
+            </div>
+        </div>
+        <div id="tableWrap"></div>
+    </div>
+</div>
+
+<script>
+let readings = JSON.parse(localStorage.getItem('mc_readings_pro')||'[]');
+let settings = JSON.parse(localStorage.getItem('mc_settings_pro')||'{}');
+let myChart = null;
+let editingId = null;
+
+const defaultGas = {
+    priceG: 0.25,
+    coefG: 10.87639,
+    fixG: 37.21
+};
+
+function init(){
+    document.getElementById('iDate').value = new Date().toISOString().split('T')[0];
+    
+    if(!settings.priceE) settings.priceE = 0.65;
+    if(!settings.priceG) settings.priceG = defaultGas.priceG;
+    if(!settings.coefG) settings.coefG = defaultGas.coefG;
+    if(!settings.fixG) settings.fixG = defaultGas.fixG;
+
+    document.getElementById('sPriceE').value = settings.priceE;
+    document.getElementById('sPriceG').value = settings.priceG;
+    document.getElementById('sCoefG').value = settings.coefG;
+    document.getElementById('sFixG').value = settings.fixG;
+
+    render();
+}
+
+function saveSettings(){
+    settings.priceE = parseFloat(document.getElementById('sPriceE').value)||0;
+    settings.priceG = parseFloat(document.getElementById('sPriceG').value)||0;
+    settings.coefG = parseFloat(document.getElementById('sCoefG').value)||1;
+    settings.fixG = parseFloat(document.getElementById('sFixG').value)||0;
+    
+    localStorage.setItem('mc_settings_pro', JSON.stringify(settings));
+    alert('Setări salvate cu succes!');
+    render();
+}
+
+function submitReading(){
+    const date = document.getElementById('iDate').value;
+    const type = document.getElementById('iType').value;
+    const index = parseFloat(document.getElementById('iIndex').value);
+    
+    if(!date || isNaN(index)) return alert('Te rog completează datele corect!');
+
+    if (editingId !== null) {
+        const target = readings.find(r => r.id === editingId);
+        if (target) {
+            target.date = date;
+            target.type = type;
+            target.index = index;
+        }
+        editingId = null;
+    } else {
+        readings.push({id: Date.now(), date, type, index});
+    }
+
+    readings.sort((a,b) => a.date.localeCompare(b.date));
+    localStorage.setItem('mc_readings_pro', JSON.stringify(readings));
+    
+    resetForm();
+    render();
+}
+
+function startEdit(id) {
+    const item = readings.find(r => r.id === id);
+    if (!item) return;
+
+    editingId = id;
+    document.getElementById('iDate').value = item.date;
+    document.getElementById('iType').value = item.type;
+    document.getElementById('iIndex').value = item.index;
+
+    document.getElementById('formTitle').textContent = '✏️ Editează Citire';
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.textContent = 'Salvează';
+    submitBtn.className = 'btn btn-edit';
+    document.getElementById('cancelBtn').style.display = 'inline-block';
+
+    document.getElementById('formTitle').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEdit() {
+    editingId = null;
+    resetForm();
+}
+
+function resetForm() {
+    editingId = null;
+    document.getElementById('iIndex').value = '';
+    document.getElementById('iDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('formTitle').textContent = '➕ Adaugă Citire';
+    
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.textContent = 'Adaugă';
+    submitBtn.className = 'btn btn-success';
+    document.getElementById('cancelBtn').style.display = 'none';
+}
+
+document.getElementById('csvFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const text = event.target.result;
+        const lines = text.split('\n');
+        lines.slice(1).forEach(line => {
+            const [date, type, index] = line.split(';');
+            if(date && type && index) {
+                readings.push({
+                    id: Date.now() + Math.random(), 
+                    date: date.trim(), 
+                    type: type.trim(), 
+                    index: parseFloat(index)
+                });
+            }
+        });
+        readings.sort((a,b) => a.date.localeCompare(b.date));
+        localStorage.setItem('mc_readings_pro', JSON.stringify(readings));
+        render();
+    };
+    reader.readAsText(file);
+});
+
+function render(){
+    renderTable();
+    renderSummary();
+    renderChart();
+}
+
+function renderTable(){
+    const w = document.getElementById('tableWrap');
+    if(!readings.length){ w.innerHTML='<div style="padding:20px">Nicio dată adăugată.</div>'; return; }
+    
+    let h='<table><thead><tr><th>Data</th><th>Tip</th><th>Index</th><th>Consum</th><th>Cost Estimat</th><th class="no-print">Acțiuni</th></tr></thead><tbody>';
+    readings.forEach((r) => {
+        let consStr = '—';
+        let costStr = '—';
+        let prev = readings.findLast(prevR => prevR.type === r.type && prevR.date < r.date);
+        
+        if(prev) {
+            const diff = r.index - prev.index;
+            if(diff >= 0) {
+                if(r.type === 'electric') {
+                    const cost = diff * (settings.priceE || 0);
+                    consStr = `${diff.toFixed(2)} kWh`;
+                    costStr = `≈ ${cost.toFixed(2)} RON`;
+                } else {
+                    const cost = diff * (settings.coefG || 1) * (settings.priceG || 0);
+                    consStr = `${diff.toFixed(2)} m³`;
+                    costStr = `≈ ${cost.toFixed(2)} RON`;
+                }
+            } else {
+                consStr = 'Eroare';
+                costStr = 'Eroare';
+            }
+        }
+        
+        h += `<tr>
+            <td>${r.date}</td>
+            <td>${r.type === 'electric' ? '⚡ Elec' : '🔥 Gaz'}</td>
+            <td>${r.index}</td>
+            <td>${consStr}</td>
+            <td style="color: #60a5fa; font-weight: 600;">${costStr}</td>
+            <td class="no-print">
+                <div class="btn-action-group">
+                    <button onclick="startEdit(${r.id})" style="background:#f59e0b; color:white; border:none; padding:5px 8px; border-radius:4px; cursor:pointer;" title="Editează">✏️</button>
+                    <button onclick="deleteReading(${r.id})" style="background:#ef4444; color:white; border:none; padding:5px 8px; border-radius:4px; cursor:pointer;" title="Șterge">✕</button>
+                </div>
+            </td>
+        </tr>`;
+    });
+    h+='</tbody></table>';
+    w.innerHTML = h;
+}
+
+function renderSummary(){
+    // Identifică ultima citire și citirea anterioară pentru fiecare utilitate
+    const electricReadings = readings.filter(r => r.type === 'electric').sort((a,b) => a.date.localeCompare(b.date));
+    const gazReadings = readings.filter(r => r.type === 'gaz').sort((a,b) => a.date.localeCompare(b.date));
+
+    let eCons = 0, eCost = 0;
+    if(electricReadings.length >= 2) {
+        const last = electricReadings[electricReadings.length - 1];
+        const prev = electricReadings[electricReadings.length - 2];
+        eCons = Math.max(0, last.index - prev.index);
+        eCost = eCons * (settings.priceE || 0);
+    }
+
+    let gCons = 0, gCost = 0;
+    if(gazReadings.length >= 2) {
+        const last = gazReadings[gazReadings.length - 1];
+        const prev = gazReadings[gazReadings.length - 2];
+        gCons = Math.max(0, last.index - prev.index);
+        gCost = (gCons * (settings.coefG || 1) * (settings.priceG || 0)) + (settings.fixG || 0);
+    }
+
+    document.getElementById('sumE').textContent = eCons.toFixed(1) + ' kWh';
+    document.getElementById('sumEC').textContent = '≈ ' + eCost.toFixed(2) + ' RON';
+    document.getElementById('sumG').textContent = gCons.toFixed(1) + ' m³';
+    document.getElementById('sumGC').textContent = '≈ ' + gCost.toFixed(2) + ' RON';
+    document.getElementById('sumT').textContent = (eCost + gCost).toFixed(2) + ' RON';
+}
+
+function renderChart(){
+    const ctx = document.getElementById('consumChart').getContext('2d');
+    
+    const labels = [...new Set(readings.map(r => r.date.substring(0, 7)))].sort();
+    
+    const dataElec = labels.map(l => {
+        const r = readings.findLast(r => r.type === 'electric' && r.date.startsWith(l));
+        if(!r) return 0;
+        const prev = readings.findLast(pr => pr.type === 'electric' && pr.date < r.date);
+        return prev ? parseFloat((r.index - prev.index).toFixed(2)) : 0;
+    });
+
+    const dataGaz = labels.map(l => {
+        const r = readings.findLast(r => r.type === 'gaz' && r.date.startsWith(l));
+        if(!r) return 0;
+        const prev = readings.findLast(pr => pr.type === 'gaz' && pr.date < r.date);
+        return prev ? parseFloat((r.index - prev.index).toFixed(2)) : 0;
+    });
+
+    if(myChart) myChart.destroy();
+
+    myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Electric (kWh)',
+                data: dataElec,
+                backgroundColor: '#fbbf24'
+            }, {
+                label: 'Gaz (m³)',
+                data: dataGaz,
+                backgroundColor: '#34d399'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: 'white' } }
+            },
+            scales: {
+                y: { ticks: { color: 'white' }, grid: { color: '#334155' } },
+                x: { ticks: { color: 'white' }, grid: { color: '#334155' } }
+            }
+        }
+    });
+}
+
+function deleteReading(id){
+    if(editingId === id) cancelEdit();
+    if(confirm('Ștergi această citire?')) {
+        readings = readings.filter(r => r.id !== id);
+        localStorage.setItem('mc_readings_pro', JSON.stringify(readings));
+        render();
+    }
+}
+
+function clearAll(){
+    if(confirm('Ștergi TOATE datele?')) {
+        readings = [];
+        editingId = null;
+        resetForm();
+        localStorage.setItem('mc_readings_pro', '[]');
+        render();
+    }
+}
+
+init();
+</script>
+</body>
+</html>

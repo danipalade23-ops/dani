@@ -1,0 +1,16 @@
+{
+  "name": "Monitor Consum Pro",
+  "short_name": "ConsumPro",
+  "description": "Urmărește consumul de utilități",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2983/2983804.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
